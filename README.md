@@ -8,7 +8,7 @@ This repository contains a small hub-spoke lab for practising Azure Firewall man
 > - The optional DNAT rule opens an SSH port on the firewall's public IP to the internet (limited to your own IP address).
 > - Terraform state is kept in a local file, which contains resource details in plain text.
 >
-> The lab also costs money while it is running. Run `terraform destroy` when you are done.
+> The lab also costs money while it is running. Run `terraform destroy` when you are done. See [Costs and clean-up](#costs-and-clean-up).
 
 
 
@@ -29,7 +29,8 @@ The image below shows the final architecture of the environment:
 * There is no inbound access from the internet by default. An optional DNAT rule for SSH can be enabled (see [Optional: inbound SSH through the firewall (DNAT)](#optional-dnat)).
 * The firewall sends its network rule and NAT rule logs to resource-specific tables in Log Analytics.
 
-### Networks and IP addresses
+<details>
+<summary><h3>Networks and IP addresses</h3> (click to expand)</summary>
 
 * `vnet-hub` (`10.0.0.0/16`)
   * `AzureFirewallSubnet` (`10.0.1.0/26`): Azure Firewall
@@ -43,6 +44,8 @@ The image below shows the final architecture of the environment:
     * `vm-server`: `10.2.20.4` (static)
 
 The firewall's private IP is assigned by Azure (usually `10.0.1.4`). Run `terraform output firewall_private_ip` to see it, or check from the Azure portal.
+
+</details>
 
 ### Traffic allowed by default
 
@@ -99,25 +102,28 @@ The firewall's private IP is assigned by Azure (usually `10.0.1.4`). Run `terraf
 > [!TIP]
 > Highly recommended: [VS Code](https://code.visualstudio.com/) with the [HashiCorp Terraform extension](https://marketplace.visualstudio.com/items?itemName=HashiCorp.terraform). You can edit the Terraform files and run the commands in the integrated terminal in the same window.
 
+## Before you deploy
+
+> [!IMPORTANT]
+> Check that your subscription can use the lab's region and VM size. Some subscriptions, such as Azure for Students, only allow certain regions.
 
 <details>
-<summary><b>Optional: install the tools with winget (Windows)</b></summary>
+<summary><b>How to check the region and VM size</b> (click to expand)</summary>
 
-```powershell
-winget install --exact --id Microsoft.VisualStudioCode
-winget install --exact --id Git.Git
-winget install --exact --id Microsoft.AzureCLI
-winget install --exact --id Hashicorp.Terraform
-```
+The defaults are `location = "swedencentral"` and `vm_size = "Standard_B2pts_v2"` in `variables.tf`.
 
-Close and reopen the terminal so the new commands are found, then install the Terraform extension and check the versions:
+1. **Allowed regions.** In the portal, see **Policy → Assignments → Allowed resource deployment regions**, or run:
+   ```powershell
+   az policy assignment show --name sys.regionrestriction --query parameters --output json
+   ```
+   If your subscription has this restriction, the output lists the allowed locations.
+2. **VM size in the region.** Run the command below. If you plan to use another region, replace `swedencentral` with its name, for example `germanywestcentral`:
+   ```powershell
+   az vm list-skus --location swedencentral --size Standard_B2pts --all --output table
+   ```
+   If the **Restrictions** column shows `NotAvailableForSubscription`, pick another region or size. This check does not detect temporary capacity shortages, so the deployment can still fail with a capacity or `SkuNotAvailable` error. See [Troubleshooting](#troubleshooting).
 
-```powershell
-code --install-extension hashicorp.terraform
-git --version
-az version
-terraform -version
-```
+To use another region or size, set `location` or `vm_size` in `terraform.tfvars`. Region names must be in the programmatic form (for example `swedencentral`, not "Sweden Central"). See the [list of Azure regions](https://learn.microsoft.com/en-us/azure/reliability/regions-list?tabs=europe) for the programmatic names.
 
 </details>
 
@@ -126,21 +132,21 @@ terraform -version
 1. Open VS Code and select **Clone Git Repository** on the Welcome page. If the Welcome page is not shown, open the Command Palette with **Ctrl+Shift+P** and run **Git: Clone**.
 2. Paste the repository URL and press **Enter**:
    ```
-   https://github.com/hautadata/firewall-lab-pilot.git
+   https://github.com/hautadata/azure-firewall-lab.git
    ```
 3. Choose where to save the lab. Create a new folder for it, for example `labs` in your home folder, so it doesn't end up in a random location.
 4. When VS Code asks whether to open the cloned repository, select **Open**.
 5. Open the integrated terminal from **Terminal → New Terminal**. It starts in the lab folder, and you run the rest of the commands there.
 
 <details>
-<summary><b>Alternative: steps 1–5 with the command line</b></summary>
+<summary><b>Alternative: steps 1–5 with the command line</b> (click to expand)</summary>
 
 Any terminal works (PowerShell, Windows Terminal, bash):
 
 ```powershell
 mkdir ~/labs
 cd ~/labs
-git clone https://github.com/hautadata/firewall-lab-pilot.git
+git clone https://github.com/hautadata/azure-firewall-lab.git
 cd <repo>
 ```
 
@@ -149,7 +155,7 @@ To edit the files in VS Code, run `code .` in the lab folder. It opens the folde
 </details>
 
 <details>
-<summary><b>Alternative: steps 1–5 without Git</b></summary>
+<summary><b>Alternative: steps 1–5 without Git</b> (click to expand)</summary>
 
 On the repository page on GitHub, select **Code → Download ZIP** and extract the ZIP to a folder of your choice, for example `labs` in your home folder. Open the extracted folder in VS Code from **File → Open Folder**, then open the integrated terminal from **Terminal → New Terminal**.
 
@@ -205,7 +211,7 @@ The lab uses the Bastion Basic SKU, which supports connections from the portal o
 Open a Bastion session to both VMs. The tests use `nc` (netcat), which is preinstalled on Ubuntu. Port 443 needs `sudo` on the server because it is below 1024.
 
 <details>
-<summary><b>nc options used in the tests</b></summary>
+<summary><b>nc options used in the tests</b> (click to expand)</summary>
 
 * `-l` listen for incoming connections (server side)
 * `-k` keep listening after a client disconnects, so you can test several times
@@ -244,7 +250,7 @@ How to read the results:
 You can repeat the test for TCP 3306 with `nc -lk 3306` on the server.
 
 <details>
-<summary><b>Try your own tests</b></summary>
+<summary><b>Try your own tests</b> (click to expand)</summary>
 
 The lab is meant for experimenting. A few ideas:
 
@@ -316,7 +322,7 @@ All firewall rules are in `firewall-rules.tf`. They are organised in three level
 Priorities range from 100 (processed first) to 65000 (processed last). The firewall processes rule collection groups in priority order, then the rule collections inside each group, and stops at the first matching rule. DNAT rules are processed before network rules. Traffic that matches no rule is denied.
 
 <details>
-<summary><b>Example: allow a new connection</b></summary>
+<summary><b>Example: allow a new connection</b> (click to expand)</summary>
 
 To allow SSH from vm-client to vm-server, add a rule to the existing `internal-network-rules` collection:
 
@@ -340,7 +346,7 @@ Remember that traffic to the VMs also passes the subnet's NSG. For this example 
 </details>
 
 <details>
-<summary><b>Example: block a destination with a Deny collection</b></summary>
+<summary><b>Example: block a destination with a Deny collection</b> (click to expand)</summary>
 
 Because everything not allowed is already denied, `Deny` collections are mainly useful for making exceptions to broad allow rules. For example, to block vm-client from one address that the outbound rule (priority 200) would otherwise allow, add a collection with a smaller priority number to `rcg-network`:
 
@@ -370,7 +376,7 @@ terraform apply tfplan
 ```
 
 <details>
-<summary><h3>Viewing the rules in the Azure portal</h3></summary>
+<summary><h3>Viewing the rules in the Azure portal</h3> (click to expand)</summary>
 
 Open the Azure portal and go to **Firewall Policies** → `fwpolicy-azure-firewall-lab` → **Rule collections**. The view lists the rule collection groups, their rule collections and the individual rules with their priorities and actions.
 
@@ -405,7 +411,7 @@ AZFWNatRule
 The time range picker above the query sets how far back the results go (by default the last 24 hours). The workspace keeps data for 30 days.
 
 <details>
-<summary><b>Example queries</b></summary>
+<summary><b>Example queries</b> (click to expand)</summary>
 
 Recent network rule decisions, newest first, with the most useful columns:
 ```kusto
@@ -461,9 +467,66 @@ You can combine filters on separate `where` lines, for example `| where SourceIp
 
 </details>
 
+<a id="troubleshooting"></a>
+<details>
+<summary><h2>Troubleshooting</h2></summary>
+
+<details>
+<summary><b>VM capacity or SKU errors</b> (click to expand)</summary>
+
+If apply fails with a capacity or `SkuNotAvailable` error, change the region, the VM size, or both in `variables.tf`:
+
+* `location`: for example one of the regions your subscription allows
+* `vm_size`: for example another size that `az vm list-skus` shows without restrictions
+
+The default `Standard_B2pts_v2` is an Arm64 size. If you switch to an x86 size such as `Standard_B2als_v2` or `Standard_B2s`, also change the image to match the architecture. The image is set in `vm.tf` (not a variable), in the `source_image_reference` block of **both** VMs:
+
+| Architecture | Example sizes | `sku` |
+|---|---|---|
+| Arm64 | `Standard_B2pts_v2` | `server-arm64` |
+| x64 | `Standard_B2als_v2`, `Standard_B2s` | `server` |
+
+`publisher = "Canonical"` and `offer = "ubuntu-24_04-lts"` stay the same.
+
+</details>
+
+<details>
+<summary><b>Failed apply</b> (click to expand)</summary>
+
+A failed apply can leave some resources created and some not. Before you change the region or try again in another region, clean up first:
+
+```bash
+terraform destroy
+```
+
+Otherwise the Terraform state and the partially created resources get mixed. After destroy, check that the resource group is gone:
+
+```bash
+az group exists --name rg-azure-firewall-lab
+```
+
+If it returns `true`, delete the resource group `rg-azure-firewall-lab` in the Azure portal.
+
+</details>
+
+<details>
+<summary><b><code>az login</code> problems in the browser</b> (click to expand)</summary>
+
+If the sign-in page doesn't complete or return to the terminal, try another browser, or sign in with a device code instead:
+
+```powershell
+az login --use-device-code
+```
+
+</details>
+
+</details>
+
 ## Costs and clean-up
 
-The lab is billed while it exists, even when there is no traffic. The largest costs come from Azure Firewall and Azure Bastion, which are billed per hour. The VMs, public IP addresses and log ingestion add to this. Check current prices for your region with the [Azure pricing calculator](https://azure.microsoft.com/pricing/calculator/).
+The lab is billed while it exists, even when there is no traffic. According to the [Azure pricing calculator](https://azure.microsoft.com/pricing/calculator/) (November 2026), the lab costs about **€13.5 per 24 hours**, which is roughly **€0.56 per hour**. A 3-hour session costs under €2.
+
+Azure Firewall and Azure Bastion make up about 97 % of the cost and are billed per hour regardless of traffic. The VMs, public IP addresses and log ingestion make up the rest. On some subscriptions, such as Azure for Students, the VM size may be covered by Azure free services. Prices vary by region and over time, so check the current prices for your region.
 
 When you are done, delete everything the lab created:
 ```bash
@@ -472,10 +535,12 @@ terraform destroy
 
 Destroying the firewall and Bastion also takes a while. Afterwards, check in the Azure portal that the resource group `rg-azure-firewall-lab` is gone.
 
-<details>
-<summary><b>Optional: remove NetworkWatcherRG</b></summary>
+Azure automatically creates a `NetworkWatcherRG` resource group when a virtual network is created. It is not managed by Terraform, costs nothing and can be left in place.
 
-When the lab creates its virtual networks, Azure automatically creates a resource group called `NetworkWatcherRG` with a Network Watcher for the region. Terraform does not manage it, so `terraform destroy` leaves it in place. It doesn't cost anything, but you can delete it if you want a clean subscription:
+<details>
+<summary><b>Optional: remove NetworkWatcherRG</b> (click to expand)</summary>
+
+If you want a clean subscription, you can delete it:
 
 1. In the Azure portal, go to **Resource groups** → `NetworkWatcherRG`.
 2. Select **Delete resource group**, type the resource group name to confirm and select **Delete**.
@@ -483,4 +548,9 @@ When the lab creates its virtual networks, Azure automatically creates a resourc
 Only delete it if you have no other virtual networks in the subscription that use it. Azure creates it again automatically the next time you deploy a virtual network.
 
 </details>
+
+## Changelog
+
+* **v1.1**: Documentation updates based on tester feedback: pre-deployment checks, troubleshooting and cost figures.
+* **v1.0**: Tested version.
 
